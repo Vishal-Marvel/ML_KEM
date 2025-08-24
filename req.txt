@@ -1,0 +1,4 @@
+cffi==1.17.1
+cryptography==45.0.6
+liboqs-python==0.14.0
+pycparser==2.22
