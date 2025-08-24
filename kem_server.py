@@ -44,7 +44,6 @@ def run_server():
                     print("Client disconnected.")
                     break
                 bundle = pickle.loads(msg_bytes)
-                print("Encrypted text:" , bundle)
                 plaintext = box.decrypt_with(alice_kem, bundle)
                 print("Decrypted from client:", plaintext.decode(errors="replace"))
                 if plaintext.strip().lower() == b"exit":
