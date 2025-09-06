@@ -1,11 +1,13 @@
-# ML-KEM TCP Demo
+# ML-KEM, ML-DSA TCP Demo
 
-This project demonstrates how to use **ML-KEM** (Kyber) post-quantum key exchange with Python to establish a shared secret and use it for symmetric encryption (AES-GCM) over a simple TCP connection.
+This project demonstrates how to use **ML-KEM** (Kyber) post-quantum key exchange,  **ML-DSA** (Dilithium) post-quantum digital signatures  with Python to establish a shared secret and use it for symmetric encryption (AES-GCM) and to sign and verify messages over a simple TCP connection.
 
-It uses the [pyoqs / liboqs](https://github.com/open-quantum-safe/liboqs) Python bindings for ML-KEM.
+It uses the [pyoqs / liboqs](https://github.com/open-quantum-safe/liboqs) Python bindings for ML-KEM and ML-DSA algorithms.
 
 ## Features
 
+- **Post-Quantum Digital Signatures (ML-DSA):**  
+  The server generates an ML-DSA keypair and shares its public key with the client.
 - **Post-Quantum Key Encapsulation (ML-KEM):**  
   The server generates an ML-KEM keypair and shares its public key with the client.
 - **AES-GCM Encryption:**  
@@ -18,9 +20,9 @@ It uses the [pyoqs / liboqs](https://github.com/open-quantum-safe/liboqs) Python
 ## Project Structure
 
 ```
-kem_box.py     # Contains MLKEMBox class and helper functions (KEM + AES logic)
-kem_server.py # TCP server: generates keypair, receives and decrypts messages
-kem_client.py # TCP client: connects, receives public key, encrypts and sends messages
+pq_box.py     # Contains MLKEMBox class and MLDSABox class and helper functions (KEM + DSA + AES logic)
+pq_server.py # TCP server: generates keypair, signatures, receives and decrypts messages
+pq_client.py # TCP client: connects, receives public key, encrypts, sends messages, verifies signed messages
 ```
 
 ## Prerequisites
@@ -40,22 +42,21 @@ pip install -r req.txt
 ## How It Works
 
 1. **Key Setup:**
-   - Server: generates ML-KEM keypair (`ML-KEM-768` by default) and sends the public key to the client.
-   - Client: encapsulates a shared secret with the public key and derives an AES-GCM key.
-2. **Message Encryption:**
-   - Client encrypts plaintext messages using AES-GCM with the derived key.
-   - The encrypted payload (KEM ciphertext + AES nonce + AES ciphertext) is sent to the server.
-3. **Decryption:**
-   - Server decapsulates the shared secret, derives the same AES key, and decrypts messages.
+   - Server: generates ML-DSA keypair (`ML-DSA-65` or `Dilithium2` by default) and sends the public key to the client.
+   - Client: stores the server’s public key for signature verification.
+2. **Message Signing:**
+   - Server signs outgoing messages with its private key.
+3. **Verification:**
+   - Client verifies the signature with the server’s public key.
+   - If the signature is valid, the message is trusted as authentic.
 
 Messages are framed with a 4-byte length prefix to allow multiple encrypted messages over the same TCP connection.
-
 ## Usage
 
 1. **Start the Server:**
 
    ```bash
-   python kem_server.py
+   python pq_server.py
    ```
 
    The server listens on `127.0.0.1:5000` and waits for a client.
@@ -63,14 +64,17 @@ Messages are framed with a 4-byte length prefix to allow multiple encrypted mess
 2. **Start the Client (in another terminal):**
 
    ```bash
-   python kem_client.py
+   python pq_client.py
    ```
 
 3. **Send Messages:**
 
-   Type any message in the client terminal and press Enter. The server will decrypt and display it.
+   Type any message in the server terminal and press Enter.  
+   The server signs it and sends both the message and signature to the client.  
+   The client verifies and displays whether the signature is valid.
 
    Type `exit` to close the connection gracefully.
+
 
 ## Example
 
@@ -78,25 +82,27 @@ Messages are framed with a 4-byte length prefix to allow multiple encrypted mess
 # Terminal 1 (server):
 Server listening on 127.0.0.1:5000
 Connected by ('127.0.0.1', 54321)
-Public key sent. Waiting for encrypted messages...
-Decrypted from client: Hello from client using ML-KEM!
-Decrypted from client: exit
-Client requested to exit.
+Public key sent. Type messages to sign and send.
+> Hello from server using ML-DSA!
+Message + signature sent.
+> exit
 Server shutting down.
 
 # Terminal 2 (client):
-Received server public key. Type messages to send. Type 'exit' to quit.
-> Hello from client using ML-KEM!
+Received server public key. Waiting for signed messages...
+Verified message: Hello from server using ML-DSA!
+Signature valid: True
 Client exiting.
 ```
+
 
 ## Security Notes
 
 - This demo is for **educational purposes**.  
-  It omits authentication and proper session key management.
+  It omits authentication of the public key and secure channel setup.
 - For production, consider:
-  - Using mutual authentication (server and client both generate KEM keys).
-  - Authenticating the public key (e.g., certificates).
+  - Authenticating the server’s public key (e.g., certificates).  
+  - Combining ML-DSA with ML-KEM for confidentiality + authenticity.  
   - Integrating with TLS-like protocols.
 
 ## References
@@ -104,7 +110,3 @@ Client exiting.
 - [FIPS-203: ML-KEM (Kyber)](https://csrc.nist.gov/projects/post-quantum-cryptography)
 - [Open Quantum Safe Project](https://openquantumsafe.org)
 - [pyoqs Python bindings](https://github.com/open-quantum-safe/liboqs-python)
-
----
-
-**License:** MIT (or whatever license you prefer)
