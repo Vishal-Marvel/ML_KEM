@@ -1,13 +1,12 @@
 import socket
 import pickle
 import struct
-from kem_box import MLKEMBox, pick_mlkem_name
+from pq_box import MLKEMBox, MLDSABox, pick_mlkem_name, pick_mldsa_name
 
 HOST = '127.0.0.1'
 PORT = 5000
 
 def recv_msg(conn):
-    # Read message length (4 bytes, big-endian)
     raw_len = conn.recv(4)
     if not raw_len:
         return None
@@ -25,8 +24,18 @@ def send_msg(conn, data_bytes):
 
 def run_server():
     kem_name = pick_mlkem_name()
-    box = MLKEMBox(kem_name)
-    alice_kem, alice_pk = box.generate_keypair()
+    sig_name = pick_mldsa_name()
+
+    # Generate ML-KEM keypair
+    kem_box = MLKEMBox(kem_name)
+    alice_kem, alice_pk = kem_box.generate_keypair()
+
+    # Generate ML-DSA keypair
+    sig_box = MLDSABox(sig_name)
+    _, sig_pk, sig_sk = sig_box.generate_keypair()
+
+    # Sign the KEM public key
+    signature = sig_box.sign(sig_sk, alice_pk)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, PORT))
@@ -35,16 +44,23 @@ def run_server():
         conn, addr = s.accept()
         with conn:
             print('Connected by', addr)
-            # Send public key once
-            send_msg(conn, pickle.dumps(alice_pk))
-            print("Public key sent. Waiting for encrypted messages...")
+            # Send: KEM pubkey, signature, sig pubkey
+            payload = {
+                "kem_pubkey": alice_pk,
+                "sig_pubkey": sig_pk,
+                "sig_alg": sig_name,
+                "signature": signature,
+            }
+            send_msg(conn, pickle.dumps(payload))
+            print("KEM public key + signature sent. Waiting for encrypted messages...")
+
             while True:
                 msg_bytes = recv_msg(conn)
                 if msg_bytes is None:
                     print("Client disconnected.")
                     break
                 bundle = pickle.loads(msg_bytes)
-                plaintext = box.decrypt_with(alice_kem, bundle)
+                plaintext = kem_box.decrypt_with(alice_kem, bundle)
                 print("Decrypted from client:", plaintext.decode(errors="replace"))
                 if plaintext.strip().lower() == b"exit":
                     print("Client requested to exit.")

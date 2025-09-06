@@ -1,7 +1,7 @@
 import socket
 import pickle
 import struct
-from kem_box import MLKEMBox, pick_mlkem_name
+from pq_box import MLKEMBox, MLDSABox, pick_mlkem_name
 
 HOST = '127.0.0.1'
 PORT = 5000
@@ -24,17 +24,23 @@ def send_msg(conn, data_bytes):
 
 def run_client():
     kem_name = pick_mlkem_name()
-    box = MLKEMBox(kem_name)
+    kem_box = MLKEMBox(kem_name)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
-        # Receive server public key
-        server_pk_bytes = recv_msg(s)
-        server_pk = pickle.loads(server_pk_bytes)
-        print("Received server public key. Type messages to send. Type 'exit' to quit.")
+        # Receive server KEM pubkey + signature
+        payload = pickle.loads(recv_msg(s))
+
+        sig_box = MLDSABox(payload["sig_alg"])
+        if not sig_box.verify(payload["sig_pubkey"], payload["kem_pubkey"], payload["signature"]):
+            raise RuntimeError("❌ Server KEM public key signature invalid! Aborting.")
+
+        print("✅ Verified server KEM public key. Type messages to send. Type 'exit' to quit.")
+        server_pk = payload["kem_pubkey"]
+
         while True:
             user_input = input("> ")
-            bundle = box.encrypt_for(server_pk, user_input.encode())
+            bundle = kem_box.encrypt_for(server_pk, user_input.encode())
             send_msg(s, pickle.dumps(bundle))
             if user_input.strip().lower() == "exit":
                 break
